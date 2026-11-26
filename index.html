@@ -33,6 +33,11 @@ textarea{min-height:180px;resize:vertical}
 </header>
 <main>
 <section class="card">
+ <section class="card">
+<h2>My Book Passage</h2>
+<p>Paste or type your textbook passage here.</p>
+<textarea id="sourceText" placeholder="Paste your textbook passage here..."></textarea>
+</section>
 <h2>Dictation Settings</h2>
 <div class="controls">
 <div>
@@ -107,12 +112,19 @@ function loadVoices(){
 loadVoices();speechSynthesis.onvoiceschanged=loadVoices;
 
 function makePassage(){
- passage=passages[Math.floor(Math.random()*passages.length)];
+ passage=$("sourceText").value.trim();
+
+ if(!passage){
+   alert("Please enter your book passage first!");
+   return false;
+ }
+
  $("passage").textContent=passage;
  $("passage").style.display="none";
  $("reveal").disabled=true;
  $("check").disabled=true;
  $("results").textContent="";
+ return true;
 }
 function splitChunks(text){
  const words=text.split(/\s+/),out=[];
@@ -140,7 +152,7 @@ function finish(){
 }
 function start(){
  speechSynthesis.cancel();clearInterval(tick);
- makePassage();remaining=Number($("duration").value)*60;updateTimer();
+if(!makePassage())return;remaining=Number($("duration").value)*60;updateTimer();
  chunks=splitChunks(passage);chunkIndex=0;
  active=true;paused=false;finished=false;
  $("start").disabled=true;$("pause").disabled=false;$("resume").disabled=true;
