@@ -136,7 +136,7 @@ function speakNext(){
  if(chunkIndex>=chunks.length){finish();return}
  const utterance=new SpeechSynthesisUtterance(chunks[chunkIndex]);
  const speed=Number($("speed").value);
- utterance.rate=Math.max(.5,Math.min(2,speed/50));
+utterance.rate=Math.max(.1,Math.min(2,speed/150));
  const voices=speechSynthesis.getVoices(),v=$("voice").value;
  if(v!==""&&voices[Number(v)])utterance.voice=voices[Number(v)];
  utterance.onend=()=>{chunkIndex++;speakNext()};
