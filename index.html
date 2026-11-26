@@ -1,0 +1,186 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WPM Dictation Studio</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#f7f5ec;color:#30392c;font-family:Arial,sans-serif}
+header{text-align:center;padding:30px 15px;background:#e9edda}
+h1{font-family:Georgia,serif;margin:0 0 8px}
+main{max-width:850px;margin:30px auto;padding:20px}
+.card{background:white;padding:24px;border-radius:16px;margin-bottom:20px;box-shadow:0 4px 18px #29351b12}
+.controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:15px}
+label{display:block;font-weight:bold;margin-bottom:8px}
+select,textarea,button{width:100%;padding:12px;border:1px solid #d7dccb;border-radius:9px;font-size:15px}
+button{background:#65794b;color:white;border:0;cursor:pointer;font-weight:bold}
+button:disabled{opacity:.5;cursor:not-allowed}
+.buttons{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}
+.buttons button{flex:1;min-width:110px}
+.timer{text-align:center;font-size:42px;font-weight:bold;color:#65794b;margin:20px}
+textarea{min-height:180px;resize:vertical}
+#passage{display:none;line-height:1.8;background:#f6f5ef;padding:15px;border-radius:10px}
+.muted{color:#777;font-size:13px}
+.result{font-size:18px;line-height:1.8}
+</style>
+</head>
+<body>
+<header>
+<h1>WPM Dictation Studio</h1>
+<p>Your personal shorthand practice room</p>
+</header>
+<main>
+<section class="card">
+<h2>Dictation Settings</h2>
+<div class="controls">
+<div>
+<label for="speed">Dictation speed</label>
+<select id="speed">
+<option>30</option><option>40</option><option selected>50</option>
+<option>60</option><option>70</option><option>80</option>
+<option>90</option><option>100</option>
+</select>
+</div>
+<div>
+<label for="duration">Duration</label>
+<select id="duration">
+<option value="1">1 minute</option>
+<option value="3">3 minutes</option>
+<option value="5" selected>5 minutes</option>
+<option value="10">10 minutes</option>
+</select>
+</div>
+<div>
+<label for="voice">Voice</label>
+<select id="voice"><option value="">Default voice</option></select>
+</div>
+</div>
+<p class="muted">Use a modern browser with speech synthesis enabled.</p>
+<div class="buttons">
+<button id="start">Start dictation</button>
+<button id="pause" disabled>Pause</button>
+<button id="resume" disabled>Resume</button>
+<button id="restart">Restart</button>
+</div>
+<div class="timer" id="timer">05:00</div>
+<p id="status" class="muted" aria-live="polite">Ready for practice.</p>
+</section>
+
+<section class="card">
+<h2>Your Transcription</h2>
+<p>Type what you hear here. Your passage will remain hidden during dictation.</p>
+<textarea id="typed" placeholder="Type your transcription here..."></textarea>
+</section>
+
+<section class="card">
+<h2>Dictation Passage</h2>
+<p id="passage">Your passage will appear here after dictation.</p>
+<button id="reveal" disabled>Reveal passage</button>
+</section>
+
+<section class="card">
+<h2>Your Results</h2>
+<button id="check" disabled>Check my transcription</button>
+<div id="results" class="result"></div>
+</section>
+</main>
+
+<script>
+const passages = [
+"Education plays an important role in the development of every individual. It provides knowledge, builds confidence and helps people make better decisions. A good education also teaches discipline, responsibility and respect for others. Students should develop the habit of reading regularly and managing their time wisely. Success requires patience, hard work and continuous improvement. Every small effort made today can create a better opportunity for tomorrow.",
+"Time is one of the most valuable resources in our lives. Once lost, it cannot be recovered. Therefore, everyone should learn to use time carefully. Proper planning helps students complete their work without unnecessary pressure. Regular practice improves concentration and confidence. A person who uses time wisely can achieve many important goals. Discipline and determination are essential qualities for success.",
+"Communication is an important part of everyday life. It allows people to exchange ideas, share information and understand one another. Clear communication requires careful listening and thoughtful speaking. In an office, good communication helps employees work together and complete their duties efficiently. Courtesy, patience and accuracy make communication more effective. These qualities are useful in both professional and personal life.",
+"Reading newspapers is a useful habit for students. It improves vocabulary, develops general knowledge and increases awareness of current events. Regular reading also helps students understand different subjects and express their thoughts clearly. They should read carefully and make a note of unfamiliar words. A little reading every day can gradually improve language skills and confidence."
+];
+
+const $=id=>document.getElementById(id);
+let passage="",chunks=[],chunkIndex=0,remaining=300,tick=null,active=false,paused=false,finished=false;
+function formatTime(n){return String(Math.floor(n/60)).padStart(2,"0")+":"+String(n%60).padStart(2,"0")}
+function updateTimer(){$("timer").textContent=formatTime(remaining)}
+function loadVoices(){
+ const voices=speechSynthesis.getVoices();
+ $("voice").innerHTML='<option value="">Default voice</option>';
+ voices.forEach((v,i)=>{let o=document.createElement("option");o.value=i;o.textContent=v.name;$("voice").appendChild(o)});
+}
+loadVoices();speechSynthesis.onvoiceschanged=loadVoices;
+
+function makePassage(){
+ passage=passages[Math.floor(Math.random()*passages.length)];
+ $("passage").textContent=passage;
+ $("passage").style.display="none";
+ $("reveal").disabled=true;
+ $("check").disabled=true;
+ $("results").textContent="";
+}
+function splitChunks(text){
+ const words=text.split(/\s+/),out=[];
+ for(let i=0;i<words.length;i+=8)out.push(words.slice(i,i+8).join(" "));
+ return out;
+}
+function speakNext(){
+ if(!active||paused)return;
+ if(chunkIndex>=chunks.length){finish();return}
+ const utterance=new SpeechSynthesisUtterance(chunks[chunkIndex]);
+ const speed=Number($("speed").value);
+ utterance.rate=Math.max(.5,Math.min(2,speed/50));
+ const voices=speechSynthesis.getVoices(),v=$("voice").value;
+ if(v!==""&&voices[Number(v)])utterance.voice=voices[Number(v)];
+ utterance.onend=()=>{chunkIndex++;speakNext()};
+ utterance.onerror=()=>{$("status").textContent="Speech could not continue. Try another voice or browser."};
+ speechSynthesis.speak(utterance);
+}
+function finish(){
+ active=false;paused=false;finished=true;
+ clearInterval(tick);speechSynthesis.cancel();
+ $("status").textContent="Dictation completed! Reveal your passage to check your work.";
+ $("pause").disabled=true;$("resume").disabled=true;
+ $("reveal").disabled=false;$("check").disabled=false;
+}
+function start(){
+ speechSynthesis.cancel();clearInterval(tick);
+ makePassage();remaining=Number($("duration").value)*60;updateTimer();
+ chunks=splitChunks(passage);chunkIndex=0;
+ active=true;paused=false;finished=false;
+ $("start").disabled=true;$("pause").disabled=false;$("resume").disabled=true;
+ $("status").textContent="Dictation in progress. Listen carefully.";
+ tick=setInterval(()=>{if(!active||paused)return;remaining--;updateTimer();if(remaining<=0)finish()},1000);
+ speakNext();
+}
+$("start").onclick=start;
+$("pause").onclick=()=>{
+ if(!active||paused)return;
+ paused=true;speechSynthesis.pause();
+ $("pause").disabled=true;$("resume").disabled=false;
+ $("status").textContent="Dictation paused.";
+};
+$("resume").onclick=()=>{
+ if(!active||!paused)return;
+ paused=false;speechSynthesis.resume();
+ $("pause").disabled=false;$("resume").disabled=true;
+ $("status").textContent="Dictation resumed.";
+};
+$("restart").onclick=()=>{
+ speechSynthesis.cancel();clearInterval(tick);
+ active=false;paused=false;finished=false;
+ $("start").disabled=false;$("pause").disabled=true;$("resume").disabled=true;
+ $("status").textContent="Ready to start again.";
+ remaining=Number($("duration").value)*60;updateTimer();
+};
+$("duration").onchange=()=>{if(!active){remaining=Number($("duration").value)*60;updateTimer()}};
+$("reveal").onclick=()=>{$("passage").style.display="block";$("check").disabled=false};
+$("check").onclick=()=>{
+ if(!passage)return;
+ const clean=s=>s.toLowerCase().replace(/[^\w\s']/g,"").trim().split(/\s+/).filter(Boolean);
+ const expected=clean(passage),actual=clean($("typed").value);
+ let correct=0;
+ const used=new Array(actual.length).fill(false);
+ expected.forEach((word,i)=>{let j=actual.findIndex((w,k)=>!used[k]&&w===word);if(j!==-1){used[j]=true;correct++}});
+ const accuracy=expected.length?Math.round(correct/expected.length*100):0;
+ $("results").innerHTML="Words in passage: "+expected.length+"<br>Words typed: "+actual.length+"<br>Matching words: "+correct+"<br><strong>Word accuracy: "+accuracy+"%</strong>";
+};
+updateTimer();
+</script>
+</body>
+</html>
